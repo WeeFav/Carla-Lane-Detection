@@ -17,7 +17,7 @@ class conv_bn_relu(torch.nn.Module):
         return x
     
 class UFLDNet(torch.nn.Module):
-    def __init__(self, size=(288, 800), pretrained=True, backbone='50', cls_dim=(37, 10, 4), use_aux=False):
+    def __init__(self, size, pretrained, backbone, cls_dim, cat_dim, use_aux, classification):
         super(UFLDNet, self).__init__()
 
         self.size = size
@@ -25,31 +25,33 @@ class UFLDNet(torch.nn.Module):
         self.h = size[1]
         # this is the dimension of the model output used for group classification. (width, height, channel)
         self.cls_dim = cls_dim # (num_gridding, num_cls_per_lane, num_of_lanes)
+        self.cat_dim = cat_dim # (num_of_lanes, num_classification)
         self.use_aux = use_aux
+        self.classification = classification
         self.total_dim = np.prod(cls_dim)
 
         # input : nchw,
         # output: (w+1) * sample_rows * 4 (num_of_lanes) 
         
         ### Res blocks ###
-        self.model = ResNet(backbone, pretrained=pretrained)
+        self.resnet = ResNet(backbone, pretrained=pretrained)
 
         ### Auxiliary segmentation ###
         if self.use_aux:
             self.aux_header2 = torch.nn.Sequential(
                 conv_bn_relu(128, 128, kernel_size=3, stride=1, padding=1) if backbone in ['34','18'] else conv_bn_relu(512, 128, kernel_size=3, stride=1, padding=1),
-                conv_bn_relu(128,128,3,padding=1),
-                conv_bn_relu(128,128,3,padding=1),
-                conv_bn_relu(128,128,3,padding=1),
+                conv_bn_relu(128, 128, 3,padding=1),
+                conv_bn_relu(128, 128, 3,padding=1),
+                conv_bn_relu(128, 128, 3,padding=1),
             )
             self.aux_header3 = torch.nn.Sequential(
                 conv_bn_relu(256, 128, kernel_size=3, stride=1, padding=1) if backbone in ['34','18'] else conv_bn_relu(1024, 128, kernel_size=3, stride=1, padding=1),
-                conv_bn_relu(128,128,3,padding=1),
-                conv_bn_relu(128,128,3,padding=1),
+                conv_bn_relu(128, 128, 3,padding=1),
+                conv_bn_relu(128, 128, 3,padding=1),
             )
             self.aux_header4 = torch.nn.Sequential(
                 conv_bn_relu(512, 128, kernel_size=3, stride=1, padding=1) if backbone in ['34','18'] else conv_bn_relu(2048, 128, kernel_size=3, stride=1, padding=1),
-                conv_bn_relu(128,128,3,padding=1),
+                conv_bn_relu(128, 128, 3,padding=1),
             )
             self.aux_combine = torch.nn.Sequential(
                 conv_bn_relu(384, 256, 3,padding=2,dilation=2),
@@ -61,24 +63,36 @@ class UFLDNet(torch.nn.Module):
             )
             initialize_weights(self.aux_header2,self.aux_header3,self.aux_header4,self.aux_combine)
 
-        ### Group classification ###
-        self.cls = torch.nn.Sequential(
+        ### Additional convolutional layer to further processes features ###
+        if backbone in ['34','18']:
+            self.conv = torch.nn.Conv2d(512, 8, 1)
+        else: 
+            self.conv =torch.nn.Conv2d(2048, 8, 1)
+
+        ### Detection (Group classification) ###
+        self.det = torch.nn.Sequential(
             torch.nn.Linear(1800, 2048),
             torch.nn.ReLU(),
             torch.nn.Linear(2048, self.total_dim),
         )
+        initialize_weights(self.det)
         
-        self.pool = torch.nn.Conv2d(512,8,1) if backbone in ['34','18'] else torch.nn.Conv2d(2048,8,1)
-        # 1/32,2048 channel
-        # 288,800 -> 9,40,2048
-        # (w+1) * sample_rows * 4
-        # 37 * 10 * 4
-        initialize_weights(self.cls)
+        ### Classification ###
+        if self.classification:
+            self.category = torch.nn.Sequential(
+                torch.nn.Linear(1800, 256),
+                torch.nn.BatchNorm1d(256),
+                torch.nn.ReLU(),
+                torch.nn.Linear(256, 100),
+                torch.nn.ReLU(),
+                torch.nn.Linear(100, np.prod(self.cat_dim))
+            )
 
     def forward(self, x):
         # n c h w - > n 2048 sh sw
         # -> n 2048
-        x2,x3,fea = self.model(x)
+        x2, x3, fea = self.resnet(x)
+
         if self.use_aux:
             x2 = self.aux_header2(x2)
             x3 = self.aux_header3(x3)
@@ -87,17 +101,24 @@ class UFLDNet(torch.nn.Module):
             x4 = torch.nn.functional.interpolate(x4,scale_factor = 4,mode='bilinear')
             aux_seg = torch.cat([x2,x3,x4],dim=1)
             aux_seg = self.aux_combine(aux_seg)
-        else:
-            aux_seg = None
 
-        fea = self.pool(fea).view(-1, 1800)
+        # fea is torch dim = (8, 9, 25), since input image is (288, 800)
+        # flatten
+        fea = self.conv(fea).view(-1, 1800) # (batch_size, input vector dim)
 
-        group_cls = self.cls(fea).view(-1, *self.cls_dim)
+        detection = self.det(fea).view(-1, *self.cls_dim)
+
+        output = {}
+        output['det'] = detection
+
+        if self.classification:
+            category = self.category(fea).view(-1, *self.cat_dim)        
+            output['cat'] = category
 
         if self.use_aux:
-            return group_cls, aux_seg
-
-        return group_cls
+            output['aux'] = aux_seg
+        
+        return output
 
 def initialize_weights(*models):
     for model in models:

@@ -28,10 +28,13 @@ def main(cfg):
     # define model
     # we dont need auxiliary segmentation in testing
     model = UFLDNet(
+        size=(288, 800),
         pretrained=False,
         backbone=cfg['backbone'],
         cls_dim=(cfg['griding_num'] + 1, cls_num_per_lane, 4),
-        use_aux=False
+        cat_dim=(cfg['num_lanes'], cfg['num_classes']),
+        use_aux=False,
+        classification=cfg['classification']
     )
     model.cuda()
 
@@ -46,8 +49,7 @@ def main(cfg):
         else:
             compatible_state_dict[k] = v
             
-    # strict=False means won’t complain if some layers are missing or if there are extra layers. Useful for fine-tuning 
-    model.load_state_dict(compatible_state_dict, strict=False)
+    model.load_state_dict(compatible_state_dict, strict=True)
     model.eval()
 
     # transform input image
@@ -66,10 +68,12 @@ def main(cfg):
         with torch.no_grad():
             out = model(imgs) # (batch_size, num_gridding, num_cls_per_lane, num_of_lanes)
 
+        detection = out['det']
+
         col_sample = np.linspace(0, 800 - 1, cfg['griding_num'])
         col_sample_w = col_sample[1] - col_sample[0]
 
-        out_j = out[0].data.cpu().numpy()
+        out_j = detection[0].data.cpu().numpy()
         out_j = out_j[:, ::-1, :] # flips rows
         prob = scipy.special.softmax(out_j[:-1, :, :], axis=0) # removes the last class, which is often reserved for no lane / background.
         idx = np.arange(cfg['griding_num']) + 1
