@@ -9,7 +9,7 @@ import numpy as np
 import yaml
 
 from model import UFLDNet
-from dataset import DemoDataset
+from data.dataset import DemoDataset
 from utils import culane_row_anchor, tusimple_row_anchor
 
 def main(cfg):

@@ -1,4 +1,4 @@
-/__pycache__
+__pycache__/
 /img_folder
 /out_folder
-*.pth
+/weights
