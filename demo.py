@@ -6,22 +6,25 @@ from torch.utils.data import DataLoader
 import scipy.special
 from tqdm import tqdm
 import numpy as np
-import yaml
 
-from model import UFLDNet
+from model.model import UFLDNet
 from data.dataset import DemoDataset
-from utils import culane_row_anchor, tusimple_row_anchor
+from configs import cfg_common, cfg_demo
 
 def main(cfg):
     # number of row anchors
     if cfg['dataset'] == 'CULane':
         cls_num_per_lane = 18
         img_w, img_h = 1640, 590
-        row_anchor = culane_row_anchor
+        row_anchor = cfg['culane_row_anchor']
     elif cfg['dataset'] == 'Tusimple':
         cls_num_per_lane = 56
         img_w, img_h = 1280, 720
-        row_anchor = tusimple_row_anchor
+        row_anchor = cfg['tusimple_row_anchor']
+    elif cfg['dataset'] == 'Carla':
+        cls_num_per_lane = 56
+        img_w, img_h = 1280, 720
+        row_anchor = cfg['carla_row_anchor']
     else:
         raise NotImplementedError
 
@@ -95,6 +98,4 @@ def main(cfg):
         cv2.imwrite(os.path.join(cfg['out_folder'], img_name + '.jpg'), vis)
 
 if __name__ == "__main__":
-    with open("demo.yaml", 'r') as f:
-        cfg = yaml.safe_load(f)
-    main(cfg)
+    main()

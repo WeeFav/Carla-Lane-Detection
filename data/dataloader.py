@@ -3,8 +3,8 @@ import os
 import numpy as np
 import torchvision.transforms as transforms
 
-import mytransforms as mytransforms
-from dataset import LaneClsDataset
+import data.mytransforms as mytransforms
+from .dataset import LaneClsDataset
 
 def get_train_loader(batch_size, data_root, griding_num, dataset, use_aux, num_lanes, row_anchor):
     target_transform = transforms.Compose([
@@ -25,28 +25,23 @@ def get_train_loader(batch_size, data_root, griding_num, dataset, use_aux, num_l
         mytransforms.RandomUDoffsetLABEL(100),
         mytransforms.RandomLROffsetLABEL(200)
     ])
-    if dataset == 'CULane':
-        train_dataset = LaneClsDataset(data_root,
-                                           os.path.join(data_root, 'list/train_gt.txt'),
-                                           img_transform=img_transform, target_transform=target_transform,
-                                           simu_transform = simu_transform,
-                                           segment_transform=segment_transform, 
-                                           row_anchor = row_anchor,
-                                           griding_num=griding_num, use_aux=use_aux, num_lanes = num_lanes)
-        cls_num_per_lane = 18
 
-    elif dataset == 'Tusimple':
+    if dataset == 'Carla':
         train_dataset = LaneClsDataset(data_root,
-                                           os.path.join(data_root, 'train_gt.txt'),
-                                           img_transform=img_transform, target_transform=target_transform,
-                                           simu_transform = simu_transform,
-                                           griding_num=griding_num, 
-                                           row_anchor = row_anchor,
-                                           segment_transform=segment_transform,use_aux=use_aux, num_lanes = num_lanes)
+                                       os.path.join(data_root, 'train_gt.txt'),
+                                       img_transform=img_transform,
+                                       target_transform=target_transform,
+                                       simu_transform=simu_transform,
+                                       griding_num=griding_num, 
+                                       row_anchor=row_anchor,
+                                       segment_transform=segment_transform,
+                                       use_aux=use_aux, 
+                                       num_lanes=num_lanes)
         cls_num_per_lane = 56
     else:
         raise NotImplementedError
 
+    print(f"Number of training data: {len(train_dataset)}")
     sampler = torch.utils.data.RandomSampler(train_dataset)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler = sampler, num_workers=4)
 

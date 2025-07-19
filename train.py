@@ -10,13 +10,14 @@ from model.model import UFLDNet
 from data.dataloader import get_train_loader
 from utils.factory import get_metric_dict, get_loss_dict, get_optimizer, get_scheduler
 from utils.metrics import update_metrics, reset_metrics
+from configs import cfg_common, cfg_train
 
 def inference(net, data_label, use_aux):
     if use_aux:
         img, cls_label, seg_label = data_label
         img, cls_label, seg_label = img.cuda(), cls_label.long().cuda(), seg_label.long().cuda()
-        cls_out, seg_out = net(img)
-        return {'cls_out': cls_out, 'cls_label': cls_label, 'seg_out':seg_out, 'seg_label': seg_label}
+        output = net(img)
+        return {'cls_out': output['det'], 'cls_label': cls_label, 'seg_out':output['aux'], 'seg_label': seg_label}
     else:
         img, cls_label = data_label
         img, cls_label = img.cuda(), cls_label.long().cuda()
@@ -92,43 +93,40 @@ def save_model(net, optimizer, epoch, save_path):
 if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
 
-    with open("demo.yaml", 'r') as f:
-        cfg = yaml.safe_load(f)
-        
-    train_loader, cls_num_per_lane = get_train_loader(cfg['batch_size'], cfg['data_root'], cfg['griding_num'], cfg['dataset'], cfg['use_aux'], cfg['num_lanes'])
-    print(len(train_loader))
+    train_loader, cls_num_per_lane = get_train_loader(cfg_train.batch_size, cfg_train.data_root, cfg_train.griding_num, cfg_train.dataset, cfg_train.use_aux, cfg_train.num_lanes, cfg_common.carla_row_anchor)
 
-    net = UFLDNet(pretrained = True, backbone=cfg.backbone,cls_dim = (cfg.griding_num+1,cls_num_per_lane, cfg.num_lanes),use_aux=cfg.use_aux).cuda()
+    net = UFLDNet(pretrained=True, backbone=cfg_train.backbone, cls_dim=(cfg_train.griding_num + 1, cls_num_per_lane, cfg_train.num_lanes), cat_dim=(cfg_train.num_lanes, cfg_train.num_cls), use_aux=cfg_train.use_aux, classification=cfg_train.classification)
+    net.cuda()
 
-    optimizer = get_optimizer(net, cfg)
+    optimizer = get_optimizer(net)
 
-    if cfg['finetune'] is not None:
-        print('finetune from ', cfg['finetune'])
-        state_all = torch.load(cfg['finetune'])['model']
+    if cfg_train.finetune is not None:
+        print('finetune from ', cfg_train.finetune)
+        state_all = torch.load(cfg_train.finetune)['model']
         state_clip = {}  # only use backbone parameters
         for k,v in state_all.items():
             if 'model' in k:
                 state_clip[k] = v
         net.load_state_dict(state_clip, strict=False)
 
-    if cfg['resume'] is not None:
-        print('==> Resume model from ' + cfg['resume'])
-        resume_dict = torch.load(cfg['resume'], map_location='cpu')
+    if cfg_train.resume is not None:
+        print('==> Resume model from ' + cfg_train.resume)
+        resume_dict = torch.load(cfg_train.resume, map_location='cpu')
         net.load_state_dict(resume_dict['model'])
         if 'optimizer' in resume_dict.keys():
             optimizer.load_state_dict(resume_dict['optimizer'])
-        resume_epoch = int(os.path.split(cfg['resume'])[1][2:5]) + 1
+        resume_epoch = int(os.path.split(cfg_train.resume)[1][2:5]) + 1
     else:
         resume_epoch = 0
 
-    scheduler = get_scheduler(optimizer, cfg, len(train_loader))
-    metric_dict = get_metric_dict(cfg)
-    loss_dict = get_loss_dict(cfg)
+    scheduler = get_scheduler(optimizer, len(train_loader))
+    metric_dict = get_metric_dict()
+    loss_dict = get_loss_dict()
 
     logger = SummaryWriter()
 
-    for epoch in range(resume_epoch, cfg['epoch']):
-        train(net, train_loader, loss_dict, optimizer, scheduler, logger, epoch, metric_dict, cfg['use_aux'])
-        save_model(net, optimizer, epoch , cfg['save_path'])
+    for epoch in range(resume_epoch, cfg_train.epoch):
+        train(net, train_loader, loss_dict, optimizer, scheduler, logger, epoch, metric_dict, cfg_train.use_aux)
+        save_model(net, optimizer, epoch , cfg_train.save_path)
     
     logger.close()

@@ -1,5 +1,5 @@
 import torch
-from backbone import ResNet
+from .backbone import ResNet
 import numpy as np
 
 class conv_bn_relu(torch.nn.Module):
@@ -17,12 +17,9 @@ class conv_bn_relu(torch.nn.Module):
         return x
     
 class UFLDNet(torch.nn.Module):
-    def __init__(self, size, pretrained, backbone, cls_dim, cat_dim, use_aux, classification):
+    def __init__(self, pretrained, backbone, cls_dim, cat_dim, use_aux, classification):
         super(UFLDNet, self).__init__()
 
-        self.size = size
-        self.w = size[0]
-        self.h = size[1]
         # this is the dimension of the model output used for group classification. (width, height, channel)
         self.cls_dim = cls_dim # (num_gridding, num_cls_per_lane, num_of_lanes)
         self.cat_dim = cat_dim # (num_of_lanes, num_classification)

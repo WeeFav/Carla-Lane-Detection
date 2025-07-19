@@ -2,7 +2,8 @@ from torch.utils.data import Dataset
 import os
 from PIL import Image
 import numpy as np
-from mytransforms import find_start_pos
+
+from .mytransforms import find_start_pos
 
 class DemoDataset(Dataset):
     def __init__(self, img_folder, img_transform=None):
@@ -107,7 +108,7 @@ class LaneClsDataset(Dataset):
 
         all_idx = np.zeros((self.num_lanes,len(sample_tmp),2))
         for i,r in enumerate(sample_tmp):
-            label_r = np.asarray(label)[int(round(r))]
+            label_r = np.asarray(label)[int(round(r))] # == label[r]
             for lane_idx in range(1, self.num_lanes + 1):
                 pos = np.where(label_r == lane_idx)[0]
                 if len(pos) == 0:

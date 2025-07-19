@@ -1,0 +1,9 @@
+dataset = 'Carla'
+img_folder = 'C:\Users\marvi\carla_lane_detection\img_folder'
+out_folder = 'C:\Users\marvi\carla_lane_detection\out_folder'
+griding_num = 200
+backbone = '18'
+model_path = 'C:\Users\marvi\carla_lane_detection\weights\culane_18.pth'
+classification = False
+num_lanes = 4
+num_classes = 2
