@@ -27,40 +27,72 @@ def get_scheduler(optimizer, iters_per_epoch):
     return scheduler
 
 def get_loss_dict():
+    loss_dict = {}
+
+    loss_dict['cls_loss'] = {
+        'op': SoftmaxFocalLoss(2),
+        'weight': 1.0,
+        'data_src': ('cls_out', 'cls_label')
+    }
+
+    loss_dict['relation_loss'] = {
+        'op': ParsingRelationLoss(),
+        'weight': cfg_train.sim_loss_w,
+        'data_src': ('cls_out',)
+    }
+
+    loss_dict['relation_dis'] = {
+        'op': ParsingRelationDis(),
+        'weight': cfg_train.shp_loss_w,
+        'data_src': ('cls_out',)
+    }
 
     if cfg_train.use_aux:
-        loss_dict = {
-            'name': ['cls_loss', 'relation_loss', 'aux_loss', 'relation_dis'],
-            'op': [SoftmaxFocalLoss(2), ParsingRelationLoss(), torch.nn.CrossEntropyLoss(), ParsingRelationDis()],
-            'weight': [1.0, cfg_train.sim_loss_w, 1.0, cfg_train.shp_loss_w],
-            'data_src': [('cls_out', 'cls_label'), ('cls_out',), ('seg_out', 'seg_label'), ('cls_out',)]
+        loss_dict['aux_loss'] = {
+            'op': torch.nn.CrossEntropyLoss(),
+            'weight': 1.0,
+            'data_src': ('seg_out', 'seg_label')
         }
-    else:
-        loss_dict = {
-            'name': ['cls_loss', 'relation_loss', 'relation_dis'],
-            'op': [SoftmaxFocalLoss(2), ParsingRelationLoss(), ParsingRelationDis()],
-            'weight': [1.0, cfg_train.sim_loss_w, cfg_train.shp_loss_w],
-            'data_src': [('cls_out', 'cls_label'), ('cls_out',), ('cls_out',)]
+
+    if cfg_train.use_classification:
+        loss_dict['classification_loss'] = {
+            'op': torch.nn.CrossEntropyLoss(),
+            'weight': 1.0,
+            'data_src': ('cat_out', 'lane_cls')
         }
 
     return loss_dict
 
 def get_metric_dict():
+    metric_dict = {}
+
+    metric_dict['top1'] = {
+        'op': MultiLabelAcc(),
+        'data_src': ('cls_out', 'cls_label')
+    }
+
+    metric_dict['top2'] = {
+        'op': AccTopk(cfg_train.griding_num, 2),
+        'data_src': ('cls_out', 'cls_label')
+    }
+
+    metric_dict['top3'] = {
+        'op':AccTopk(cfg_train.griding_num, 3),
+        'data_src': ('cls_out', 'cls_label')
+    }
 
     if cfg_train.use_aux:
-        metric_dict = {
-            'name': ['top1', 'top2', 'top3', 'iou'],
-            'op': [MultiLabelAcc(), AccTopk(cfg_train.griding_num, 2), AccTopk(cfg_train.griding_num, 3), Metric_mIoU(cfg_train.num_lanes+1)],
-            'data_src': [('cls_out', 'cls_label'), ('cls_out', 'cls_label'), ('cls_out', 'cls_label'), ('seg_out', 'seg_label')]
-        }
-    else:
-        metric_dict = {
-            'name': ['top1', 'top2', 'top3'],
-            'op': [MultiLabelAcc(), AccTopk(cfg_train.griding_num, 2), AccTopk(cfg_train.griding_num, 3)],
-            'data_src': [('cls_out', 'cls_label'), ('cls_out', 'cls_label'), ('cls_out', 'cls_label')]
+        metric_dict['iou'] = {
+            'op': Metric_mIoU(cfg_train.num_lanes+1),
+            'data_src': ('seg_out', 'seg_label')
         }
 
-    
+    if cfg_train.use_classification:
+        metric_dict['cat_acc'] = {
+            'op': MultiLabelAcc(),
+            'data_src': ('cat_out', 'lane_cls')
+        }
+
     return metric_dict
 
 

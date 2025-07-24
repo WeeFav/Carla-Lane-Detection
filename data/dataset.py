@@ -2,6 +2,7 @@ from torch.utils.data import Dataset
 import os
 from PIL import Image
 import numpy as np
+import torch
 
 from .mytransforms import find_start_pos
 
@@ -26,7 +27,7 @@ class DemoDataset(Dataset):
     
 class LaneClsDataset(Dataset):
     def __init__(self, path, list_path, img_transform = None,target_transform = None,simu_transform = None, griding_num=50, load_name = False,
-                row_anchor = None,use_aux=False,segment_transform=None, num_lanes = 4):
+                row_anchor = None,use_aux=False,segment_transform=None, num_lanes = 4, classification=True):
         super(LaneClsDataset, self).__init__()
         self.img_transform = img_transform
         self.target_transform = target_transform
@@ -37,6 +38,7 @@ class LaneClsDataset(Dataset):
         self.load_name = load_name
         self.use_aux = use_aux
         self.num_lanes = num_lanes
+        self.classification = classification
 
         with open(list_path, 'r') as f:
             self.list = f.readlines()
@@ -51,6 +53,9 @@ class LaneClsDataset(Dataset):
         if img_name[0] == '/':
             img_name = img_name[1:]
             label_name = label_name[1:]
+        
+        if self.classification:
+            lane_cls = [int(i) for i in l_info[6:]]
 
         label_path = os.path.join(self.path, label_name)
         label = Image.open(label_path)
@@ -75,13 +80,16 @@ class LaneClsDataset(Dataset):
         if self.img_transform is not None:
             img = self.img_transform(img)
 
-        if self.use_aux:
-            return img, cls_label, seg_label
         
+        ret = {"img": img, "cls_label": cls_label}
         if self.load_name:
-            return img, cls_label, img_name
+            ret["img_name"] = img_name
+        if self.use_aux:
+            ret["seg_label"] = seg_label
+        if self.classification:
+            ret["lane_cls"] = torch.from_numpy(np.array(lane_cls)).long()
         
-        return img, cls_label
+        return ret
 
     def __len__(self):
         return len(self.list)

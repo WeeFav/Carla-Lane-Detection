@@ -1,36 +1,38 @@
+from datetime import datetime
+
 # DATASET
 dataset = 'Carla'
 data_root = 'C:\\Users\\marvi\\Datasets\\Lane\\CarlaLane'
 num_lanes = 4
-num_cls = 2
+num_cls = 4
 
 # NETWORK
-use_aux = True
-griding_num = 200
 backbone = '18'
-classification = True
+griding_num = 100
+use_aux = True
+use_classification = True
 
 # TRAIN
 epoch = 50
-batch_size = 32
-optimizer = 'SGD' # ['SGD','Adam']
-learning_rate = 0.1
+batch_size = 16
+optimizer = 'Adam' # ['SGD','Adam']
+learning_rate = 4e-4
 weight_decay = 1e-4
 momentum = 0.9
 
 # SCHEDULER
-scheduler = 'multi' # ['multi', 'cos']
-steps = [25,38]
-gamma  = 0.1
+scheduler = 'cos' # ['multi', 'cos']
+steps = [25,38] # Not used in cosine schedule
+gamma  = 0.1 # Ignored in cosine, only used in step-based scheduler
 warmup = 'linear'
-warmup_iters = 695
+warmup_iters = 100  
 
 # LOSS
-sim_loss_w = 0.0
+sim_loss_w = 1.0
 shp_loss_w = 0.0
 
 # FINETUNE or RESUME MODEL PATH
 finetune = None
 resume = None
-save_path = "C:\\Users\\marvi\\carla_lane_detection\\weights"
-
+timestamp = datetime.now().strftime("%m_%d_%H_%M_%S")
+save_path = f"C:\\Users\\marvi\\carla_lane_detection\\weights\\{timestamp}"

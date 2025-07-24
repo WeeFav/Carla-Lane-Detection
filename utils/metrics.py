@@ -70,15 +70,15 @@ class AccTopk():
     def get(self):
         return self.top5_correct * 1.0 / self.cnt
 
-def update_metrics(metric_dict, pair_data):
-    for i in range(len(metric_dict['name'])):
-        metric_op = metric_dict['op'][i]
-        data_src = metric_dict['data_src'][i]
-        metric_op.update(pair_data[data_src[0]], pair_data[data_src[1]])
+def update_metrics(metric_dict, results):
+    for k, v in metric_dict.items():
+        metric_op = v['op']
+        data_src = v['data_src']
+        metric_op.update(results[data_src[0]], results[data_src[1]])
 
 def reset_metrics(metric_dict):
-    for op in metric_dict['op']:
-        op.reset()
+    for k, v in metric_dict.items():
+        v['op'].reset()
 
 
 if __name__ == '__main__':

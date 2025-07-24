@@ -31,7 +31,7 @@ def get_train_loader(batch_size, data_root, griding_num, dataset, use_aux, num_l
                                        os.path.join(data_root, 'train_gt.txt'),
                                        img_transform=img_transform,
                                        target_transform=target_transform,
-                                       simu_transform=simu_transform,
+                                       simu_transform=None,
                                        griding_num=griding_num, 
                                        row_anchor=row_anchor,
                                        segment_transform=segment_transform,

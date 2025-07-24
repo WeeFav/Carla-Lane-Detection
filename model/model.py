@@ -17,14 +17,14 @@ class conv_bn_relu(torch.nn.Module):
         return x
     
 class UFLDNet(torch.nn.Module):
-    def __init__(self, pretrained, backbone, cls_dim, cat_dim, use_aux, classification):
+    def __init__(self, pretrained, backbone, cls_dim, cat_dim, use_aux, use_classification):
         super(UFLDNet, self).__init__()
 
         # this is the dimension of the model output used for group classification. (width, height, channel)
         self.cls_dim = cls_dim # (num_gridding, num_cls_per_lane, num_of_lanes)
         self.cat_dim = cat_dim # (num_of_lanes, num_classification)
         self.use_aux = use_aux
-        self.classification = classification
+        self.use_classification = use_classification
         self.total_dim = np.prod(cls_dim)
 
         # input : nchw,
@@ -75,7 +75,7 @@ class UFLDNet(torch.nn.Module):
         initialize_weights(self.det)
         
         ### Classification ###
-        if self.classification:
+        if self.use_classification:
             self.category = torch.nn.Sequential(
                 torch.nn.Linear(1800, 256),
                 torch.nn.BatchNorm1d(256),
@@ -108,7 +108,7 @@ class UFLDNet(torch.nn.Module):
         output = {}
         output['det'] = detection
 
-        if self.classification:
+        if self.use_classification:
             category = self.category(fea).view(-1, *self.cat_dim)        
             output['cat'] = category
 
