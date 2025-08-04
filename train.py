@@ -7,7 +7,7 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 from model.model import UFLDNet
-from data.dataloader import get_train_loader
+from data.dataloader import get_data_loader
 from utils.factory import get_metric_dict, get_loss_dict, get_optimizer, get_scheduler
 from utils.metrics import update_metrics, reset_metrics
 from configs import cfg_common, cfg_train
@@ -44,7 +44,7 @@ def resolve_val_data(results, use_aux, use_classification):
         results['cat_out'] = torch.argmax(results['cat_out'], dim=1)
     return results
 
-def calc_loss(loss_dict, results, logger, global_step):
+def calc_loss(loss_dict, results, logger, global_step, split):
     loss = 0
 
     for k, v in loss_dict.items():
@@ -54,7 +54,7 @@ def calc_loss(loss_dict, results, logger, global_step):
         loss_cur = v['op'](*datas)
 
         if global_step % 20 == 0:
-            logger.add_scalar('loss/'+k, loss_cur, global_step)
+            logger.add_scalar(f'{split}_loss/'+k, loss_cur, global_step)
 
         loss += loss_cur * v['weight']
 
@@ -63,7 +63,7 @@ def calc_loss(loss_dict, results, logger, global_step):
 def train(net, data_loader, loss_dict, optimizer, scheduler, logger, epoch, metric_dict, use_aux, use_classification):
     net.train()
 
-    progress_bar = tqdm(train_loader)
+    progress_bar = tqdm(data_loader)
     t_data_0 = time.time()
 
     for b_idx, data_label in enumerate(progress_bar):
@@ -74,7 +74,7 @@ def train(net, data_loader, loss_dict, optimizer, scheduler, logger, epoch, metr
         t_net_0 = time.time()
         results = inference(net, data_label, use_aux, use_classification)
 
-        loss = calc_loss(loss_dict, results, logger, global_step)
+        loss = calc_loss(loss_dict, results, logger, global_step, 'train')
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -89,7 +89,7 @@ def train(net, data_loader, loss_dict, optimizer, scheduler, logger, epoch, metr
             for k, v in metric_dict.items():
                 me_name = k
                 me_op = v['op']
-                logger.add_scalar('metric/' + me_name, me_op.get(), global_step=global_step)
+                logger.add_scalar('train_metric/' + me_name, me_op.get(), global_step=global_step)
         logger.add_scalar('meta/lr', optimizer.param_groups[0]['lr'], global_step=global_step)
 
         kwargs = {}
@@ -97,15 +97,52 @@ def train(net, data_loader, loss_dict, optimizer, scheduler, logger, epoch, metr
             me_name = k
             me_op = v['op']
             kwargs[me_name] = '%.3f' % me_op.get()
-
-            # if me_name == 'cat_acc':
-            #     print(me_op.cnt, me_op.correct)
         
         progress_bar.set_postfix(loss = '%.3f' % float(loss), 
                                 data_time = '%.3f' % float(t_data_1 - t_data_0), 
                                 net_time = '%.3f' % float(t_net_1 - t_net_0), 
                                 **kwargs)
         t_data_0 = time.time()
+
+def test(net, data_loader, loss_dict, logger, epoch, metric_dict, use_aux, use_classification):
+    net.eval()
+
+    progress_bar = tqdm(data_loader)
+    t_data_0 = time.time()
+
+    with torch.no_grad():
+        for b_idx, data_label in enumerate(progress_bar):
+            t_data_1 = time.time()
+            reset_metrics(metric_dict)
+            global_step = epoch * len(data_loader) + b_idx
+
+            t_net_0 = time.time()
+            results = inference(net, data_label, use_aux, use_classification)
+            t_net_1 = time.time()
+
+            loss = calc_loss(loss_dict, results, logger, global_step, 'test')
+
+            results = resolve_val_data(results, use_aux, use_classification)
+
+            update_metrics(metric_dict, results)
+
+            if global_step % 20 == 0:
+                for k, v in metric_dict.items():
+                    me_name = k
+                    me_op = v['op']
+                    logger.add_scalar('test_metric/' + me_name, me_op.get(), global_step=global_step)
+
+            kwargs = {}
+            for k, v in metric_dict.items():
+                me_name = k
+                me_op = v['op']
+                kwargs[me_name] = '%.3f' % me_op.get()
+            
+            progress_bar.set_postfix(loss = '%.3f' % float(loss), 
+                                    data_time = '%.3f' % float(t_data_1 - t_data_0), 
+                                    net_time = '%.3f' % float(t_net_1 - t_net_0), 
+                                    **kwargs)
+            t_data_0 = time.time()
 
 def save_model(net, optimizer, epoch, save_path):
     model_state_dict = net.state_dict()
@@ -117,7 +154,7 @@ def save_model(net, optimizer, epoch, save_path):
 if __name__ == "__main__":
     torch.backends.cudnn.benchmark = True
 
-    train_loader, cls_num_per_lane = get_train_loader(cfg_train.batch_size, cfg_train.data_root, cfg_train.griding_num, cfg_train.dataset, cfg_train.use_aux, cfg_train.num_lanes, cfg_common.carla_row_anchor)
+    train_loader, test_loader, cls_num_per_lane = get_data_loader(cfg_train.batch_size, cfg_train.data_root, cfg_train.griding_num, cfg_train.dataset, cfg_train.use_aux, cfg_train.num_lanes, cfg_common.carla_row_anchor)
 
     net = UFLDNet(
         pretrained=True, 
@@ -159,7 +196,10 @@ if __name__ == "__main__":
     os.makedirs(cfg_train.save_path)
 
     for epoch in range(resume_epoch, cfg_train.epoch):
+        print(f"Starting epoch {epoch}")
         train(net, train_loader, loss_dict, optimizer, scheduler, logger, epoch, metric_dict, cfg_train.use_aux, cfg_train.use_classification)
+        test(net, test_loader, loss_dict, logger, epoch, metric_dict, cfg_train.use_aux, cfg_train.use_classification)
+
     save_model(net, optimizer, epoch , cfg_train.save_path)
     
     logger.close()

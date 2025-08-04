@@ -2,11 +2,12 @@ import torch
 import os
 import numpy as np
 import torchvision.transforms as transforms
+from torch.utils.data import DataLoader, RandomSampler, random_split
 
 import data.mytransforms as mytransforms
 from .dataset import LaneClsDataset
 
-def get_train_loader(batch_size, data_root, griding_num, dataset, use_aux, num_lanes, row_anchor):
+def get_data_loader(batch_size, data_root, griding_num, dataset, use_aux, num_lanes, row_anchor):
     target_transform = transforms.Compose([
         mytransforms.FreeScaleMask((288, 800)),
         mytransforms.MaskToTensor(),
@@ -27,7 +28,7 @@ def get_train_loader(batch_size, data_root, griding_num, dataset, use_aux, num_l
     ])
 
     if dataset == 'Carla':
-        train_dataset = LaneClsDataset(data_root,
+        full_dataset = LaneClsDataset(data_root,
                                        os.path.join(data_root, 'train_gt.txt'),
                                        img_transform=img_transform,
                                        target_transform=target_transform,
@@ -41,11 +42,20 @@ def get_train_loader(batch_size, data_root, griding_num, dataset, use_aux, num_l
     else:
         raise NotImplementedError
 
-    print(f"Number of training data: {len(train_dataset)}")
-    sampler = torch.utils.data.RandomSampler(train_dataset)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, sampler = sampler, num_workers=4)
+    # Define split sizes
+    train_size = int(0.7 * len(full_dataset))
+    test_size = len(full_dataset) - train_size
 
-    return train_loader, cls_num_per_lane
+    train_dataset, test_dataset = random_split(full_dataset, [train_size, test_size])
+
+    print(f"Number of training data: {len(train_dataset)}")
+    print(f"Number of testing data: {len(test_dataset)}")
+
+    sampler = RandomSampler(train_dataset)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+
+    return train_loader, test_loader, cls_num_per_lane
 
 def get_test_loader(batch_size, data_root, dataset):
     img_transforms = transforms.Compose([
